@@ -12,13 +12,13 @@ options(bitmapType = "cairo")
 
 ## Compute environment
 
-Clear data environment. 
+Clear data environment.
 
 ```{r ClearDataEnv}
 rm(list=ls())
 ```
 
-Load required packages and functions.
+Load required packages
 
 ```{r setupPackages, message=F, warning=F}
 .libPaths("/g/steinmetz/velten/Software/RLibs-seurat3/")
@@ -77,9 +77,9 @@ pairs$enh_chr = factor(pairs$enh_chr) # Select genes which are associated with a
 sig_genes_pairs_300kb_atLeastOneHit = pairs %>%
   group_by(sample, gene) %>%
   filter(dist_to_tss <= 0.3e6 ) %>% # changed, like in fulco
-  filter(sum(significant) > 0) %>% 
+  filter(sum(significant) > 0) %>%
   select(-c(2, 5:13, 24:28, 31))
-  
+
 # Genes which are associated with at least one enhancer genome-wide
 sig_genes_pairs = pairs %>%
   group_by(sample, gene) %>%
@@ -103,23 +103,23 @@ training = sig_genes_pairs_300kb_atLeastOneHit[ inTraining, -c(14,16,17,19)] # R
 testing = sig_genes_pairs_300kb_atLeastOneHit[-inTraining, -c(14,16,17,19)] # Remove ABC score, dist_bins
 
 
-chrom8_sig_genes_pairs_300kb_atLeastOneHit = sig_genes_pairs_300kb_atLeastOneHit %>% 
+chrom8_sig_genes_pairs_300kb_atLeastOneHit = sig_genes_pairs_300kb_atLeastOneHit %>%
   subset(subset = sig_genes_pairs_300kb_atLeastOneHit$enh_chr == "chr8")
 
-chrom11_sig_genes_pairs_300kb_atLeastOneHit = sig_genes_pairs_300kb_atLeastOneHit %>% 
+chrom11_sig_genes_pairs_300kb_atLeastOneHit = sig_genes_pairs_300kb_atLeastOneHit %>%
   subset(subset = sig_genes_pairs_300kb_atLeastOneHit$enh_chr == "chr11")
 
 
-chrom8_training = training %>% 
+chrom8_training = training %>%
   subset(subset = training$enh_chr == "chr8")
 
-chrom11_training = training %>% 
+chrom11_training = training %>%
   subset(subset = training$enh_chr == "chr11")
 
-chrom8_testing = testing %>% 
+chrom8_testing = testing %>%
   subset(subset = testing$enh_chr == "chr8")
 
-chrom11_testing = testing %>% 
+chrom11_testing = testing %>%
   subset(subset = testing$enh_chr == "chr11")
 
 
@@ -130,7 +130,7 @@ preproc_list = list(
   model_chrom8_testing = chrom8_testing,
   model_chrom11_training = chrom11_training,
   model_chrom11_testing = chrom11_testing
-  # training_gw = training_gw, 
+  # training_gw = training_gw,
   # testing_gw = testing_gw
   )
 
@@ -139,14 +139,14 @@ preproc_list = list(
 process_data = function(my_data){
   numvar = names(my_data)[which(sapply(my_data, is.numeric))]
   my_data_new <<- my_data[,numvar]
-  
+
   my_data_new$significant <<- ifelse(my_data_new$significant == 1, "yes", "no")
   my_data_new$significant <<- factor(my_data_new$significant) # factorize significaance column
 
   return(my_data_new)
 }
 
-# Apply numeric selction function to list of datasets 
+# Apply numeric selction function to list of datasets
 output = lapply(preproc_list, process_data)
 for(i in 1:length(output)){
   tempobj = output[[i]]
@@ -313,9 +313,9 @@ list_chrom11_self_models = list(xgbt_chrom11 = fit_chrom11_xgbt,
 calc_auprc = function(model, data){
   index_significant = data$significant == "yes"
   index_insignificant = data$significant == "no"
-  
+
   predictions = predict(model, data, type = "prob")
-  
+
   pr.curve(predictions$yes[index_significant], predictions$yes[index_insignificant], curve = TRUE)
 }
 
@@ -323,13 +323,13 @@ calc_auprc = function(model, data){
 
 # mat = cbind(predict(fit_combined_ranger, model_combined_training, type = "prob"),
 #             model_combined_training$significant)
-# 
+#
 # model_combined_training$significant[1:100]
-# 
+#
 # combined_preds = predict(fit_combined_ranger, model_combined_training, type = "vote")
 # combined_preds[1:100]
 # view(fit_combined_GBM$pred)
-# 
+#
 # y <- as.data.frame(pr$curve)
 # ggplot(y, aes(y$V1, y$V2))+geom_path()+ylim(0,1)
 
@@ -339,7 +339,7 @@ calc_auprc = function(model, data){
 # Calculate AUPRC for models
 # PR_combined_preds = list_combined_models %>%
 #   map(calc_auprc, data = model_combined_testing)
-# 
+#
 # AUPRCs = c(PR_combined_preds$xgbt_combined$auc.integral,
 #            PR_combined_preds$GBM_combined$auc.integral,
 #            PR_combined_preds$random_forest_combined$auc.integral,
@@ -402,7 +402,7 @@ AUPRC_summaries = rbind(AUPRC_summaries, matrix(AUPRCs_11on8, ncol = length(mode
 
 ```
 
-Plot PR curves for non-self prediction 
+Plot PR curves for non-self prediction
 ```{r Plot_Other_Curves}
 
 
@@ -410,7 +410,7 @@ Plot PR curves for non-self prediction
 #                           GBM_chrom8on11 = fit_chrom8on11_GBM,
 #                           random_forest_chrom8on11 = fit_chrom8on11_ranger
 #                           )
-# 
+#
 # list_chrom11on8_models = list(xgbt_chrom11on8 = fit_chrom11on8_xgbt,
 #                            GBM_chrom11on8 = fit_chrom11on8_GBM,
 #                            random_forest_chrom11on8 = fit_chrom11on8_ranger
