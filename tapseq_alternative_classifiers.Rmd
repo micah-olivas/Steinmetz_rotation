@@ -12,13 +12,13 @@ options(bitmapType = "cairo")
 
 ## Compute environment
 
-Clear data environment.
+Clear data environment
 
 ```{r ClearDataEnv}
 rm(list=ls())
 ```
 
-Load required packages. Wow
+Load required packages
 
 ```{r setupPackages, message=F, warning=F}
 .libPaths("/g/steinmetz/velten/Software/RLibs-seurat3/")
@@ -39,12 +39,17 @@ library("ROCR")
 
 Differential expression testing was performed for the data from the screen and results were annotated with epigenome and HiC information. To generate these data, run the rule the rule chromatin_annotated_etps of https://github.com/argschwind/tapseq_manuscript. The results are loaded into R. Gene-wise mean expression levels are also loaded.
 
+Load all gene enhancer pair data without power Andreas Gschwind's power calculations
+
 ```{r loadOriginalData}
 pairs_old = read.csv(url("http://steinmetzlab.embl.de/TAPdata/chromatin_annotated_pairs.csv"), stringsAsFactors = F)
 #this corresponds to the ../data/chromatin_annotated_pairs.csv if the snakemake pipeline was run
 expression = readRDS(url("http://steinmetzlab.embl.de/TAPdata/screen_mean_expression.RDS"))
 #this corresponds to the row means of ../data/11iScreen1 if the snakemake pipeline was run
 ```
+
+Load all gene enhancer pairs with power calculations and filter for 80 percent 
+power at effect size 25
 
 ```{r loadFilteredData}
 pairs = read.csv("/Users/micaholivas/Desktop/Rotations/Steinmetz_Fall/Filtered_Data/chrom_tapseq_perCRE_nGenesCovar_0.08gStd.tsv", stringsAsFactors = F)
