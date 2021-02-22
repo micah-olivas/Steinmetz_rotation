@@ -18,7 +18,7 @@ Clear data environment.
 rm(list=ls())
 ```
 
-Load required packages
+Load required packages. Wow
 
 ```{r setupPackages, message=F, warning=F}
 .libPaths("/g/steinmetz/velten/Software/RLibs-seurat3/")
