@@ -98,10 +98,6 @@ sig_genes_pairs = pairs %>%
 
 ```{r CV_Partition}
 
-# ABC_norm = sig_genes_pairs_300kb_atLeastOneHit$abc_score_norm
-# dist_bins = c("dist_bins")
-# ABC_score_dist_bins_expression = c(ncol("abc_score_norm", "abc_score_norm", "dist_bins", "expression"))
-
 # Partition data for cross-validation during scripting
 inTraining = createDataPartition(sig_genes_pairs_300kb_atLeastOneHit$significant, p = .90, list = FALSE)
 training = sig_genes_pairs_300kb_atLeastOneHit[ inTraining, -c(14,16,17,19)] # Remove ABC score, dist_bins
@@ -298,20 +294,20 @@ Calculate AUPRC for Self Models
 ```{r Compare_Models}
 
 # Create a list containing all models
-list_combined_models = list(xgbt_combined = fit_combined_xgbt,
+models_list_combined = list(xgbt_combined = fit_combined_xgbt,
                             GBM_combined = fit_combined_GBM,
                             random_forest_combined = fit_combined_ranger
                             )
 
-list_chrom8_self_models = list(xgbt_chrom8 = fit_chrom8_xgbt,
-                               GBM_chrom8 = fit_chrom8_GBM,
-                               random_forest_chrom8 = fit_chrom8_ranger
-                               )
+models_list_chrom8 = list(xgbt_chrom8 = fit_chrom8_xgbt,
+                          GBM_chrom8 = fit_chrom8_GBM,
+                          random_forest_chrom8 = fit_chrom8_ranger
+                          )
 
-list_chrom11_self_models = list(xgbt_chrom11 = fit_chrom11_xgbt,
-                                GBM_chrom11 = fit_chrom11_GBM,
-                                random_forest_chrom11 = fit_chrom11_ranger
-                                )
+models_list_chrom11 = list(xgbt_chrom11 = fit_chrom11_xgbt,
+                           GBM_chrom11 = fit_chrom11_GBM,
+                           random_forest_chrom11 = fit_chrom11_ranger
+                           )
 
 
 # Write function to generate predictions and precision recall curve by model on testing set
@@ -361,6 +357,7 @@ AUPRC_summaries = matrix(AUPRCs, ncol = length(model_types), dimnames = model_me
 
 
 Plot AUPRC for Combined and Self Chrom Prediction Training
+
 ```{r Plot_Self_Curves}
 
 # Plot Curves for Combined Train and Test
@@ -372,6 +369,7 @@ curves_combined = evalm(list(fit_combined_ranger, fit_combined_xgbt, fit_combine
 ## Non-self Comparisons
 
 Calculate area under PR curves for non-self prediction
+
 ```{r Other_AUPRC}
 
 # Calculate AUPRC for models
@@ -393,8 +391,6 @@ AUPRCs_11on8 = c(PR_11on8_preds$xgbt_chrom11$auc.integral,
                  0.5122513 # From Schraivogel et al. 2020 combined training script
                  )
 
-PR_11on8_preds
-
 model_types = c("GBM", "XGBOOST", "Random Forest (Caret)", "Random Forest (Old)")
 metrics_8on11 = c("8 -> 11")
 metrics_11on8 = c("11 -> 8")
@@ -408,6 +404,7 @@ AUPRC_summaries = rbind(AUPRC_summaries, matrix(AUPRCs_11on8, ncol = length(mode
 ```
 
 Plot PR curves for non-self prediction
+
 ```{r Plot_Other_Curves}
 
 
