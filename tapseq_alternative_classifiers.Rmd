@@ -20,12 +20,13 @@ rm(list=ls())
 
 Load required packages
 
-```{r setupPackages, message=F, warning=F}
+```{r setupPackages}
+
 .libPaths("/g/steinmetz/velten/Software/RLibs-seurat3/")
+library('rmarkdown')
 library("tidyverse")
 library("randomForest")
 library("caret")
-library("dplyr")
 library("ranger")
 library("xgboost")
 library("MLeval")
@@ -154,6 +155,29 @@ for(i in 1:length(output)){
   eval(parse(text = paste(names(output)[[i]], "=tempobj")))
 }
 
+```
+
+Remove temporary variables
+
+```{r Remove_Variables}
+
+# Remove temporary variables
+rm(tempobj,
+   my_data_new,
+   pairs_old,
+   sig_genes_pairs,
+   sig_genes_pairs_300kb_atLeastOneHit,
+   inTraining,
+   testing,
+   training,
+   chrom8_testing,
+   chrom8_training,
+   chrom8_sig_genes_pairs_300kb_atLeastOneHit,
+   chrom11_testing,
+   chrom11_training,
+   chrom11_sig_genes_pairs_300kb_atLeastOneHit,
+   preproc_list
+   )
 
 ```
 
@@ -293,7 +317,7 @@ fit_chrom11_GBM = train(significant ~ .,
 Calculate AUPRC for Self Models
 ```{r Compare_Models}
 
-# Create a list containing all models
+# Create lists containing each set of models
 models_list_combined = list(xgbt_combined = fit_combined_xgbt,
                             GBM_combined = fit_combined_GBM,
                             random_forest_combined = fit_combined_ranger
@@ -310,7 +334,7 @@ models_list_chrom11 = list(xgbt_chrom11 = fit_chrom11_xgbt,
                            )
 
 
-# Write function to generate predictions and precision recall curve by model on testing set
+# define function to generate predictions and precision recall curve by model on testing set
 calc_auprc = function(model, data){
   index_significant = data$significant == "yes"
   index_insignificant = data$significant == "no"
@@ -319,40 +343,19 @@ calc_auprc = function(model, data){
 
   pr.curve(predictions$yes[index_significant], predictions$yes[index_insignificant], curve = TRUE)
 }
+```
 
-# calc_auprc(fit_chrom8_GBM, model_chrom11_training)
+Create table of AUPRC values
 
-# mat = cbind(predict(fit_combined_ranger, model_combined_training, type = "prob"),
-#             model_combined_training$significant)
-#
-# model_combined_training$significant[1:100]
-#
-# combined_preds = predict(fit_combined_ranger, model_combined_training, type = "vote")
-# combined_preds[1:100]
-# view(fit_combined_GBM$pred)
-#
-# y <- as.data.frame(pr$curve)
-# ggplot(y, aes(y$V1, y$V2))+geom_path()+ylim(0,1)
-
-
-
-
-# Calculate AUPRC for models
-# PR_combined_preds = list_combined_models %>%
-#   map(calc_auprc, data = model_combined_testing)
-#
-# AUPRCs = c(PR_combined_preds$xgbt_combined$auc.integral,
-#            PR_combined_preds$GBM_combined$auc.integral,
-#            PR_combined_preds$random_forest_combined$auc.integral,
-#            0.5364040 # From Schraivogel et al. 2020 combined training script
-#            )
-
+```{r Model_Metrics}
 model_types = c("XGBOOST", "GBM", "Random Forest (Caret)", "Random Forest (Old)")
 metrics = c("Train on All")
 
-model_metrics = list(metrics, model_types)
+metrics_of_models = list(metrics, model_types)
 
-AUPRC_summaries = matrix(AUPRCs, ncol = length(model_types), dimnames = model_metrics)
+calc_auprc(model_chrom11_testing, chrom8_testing)
+
+AUPRC_summaries = matrix(AUPRCs, ncol = length(model_types), dimnames = metrics_of_models)
 ```
 
 
@@ -360,9 +363,14 @@ Plot AUPRC for Combined and Self Chrom Prediction Training
 
 ```{r Plot_Self_Curves}
 
+# set quartz as graphical device for plot output
+quartz()
+# pdf()
+
 # Plot Curves for Combined Train and Test
 curves_combined = evalm(list(fit_combined_ranger, fit_combined_xgbt, fit_combined_GBM), gnames = c("Random Forest", "Gradient-Boosted Trees", "Gradient-Boosted Machine"), plots = c("pr"), title = "AUPRCs (Trained on Significant Pairs less than 300kb separation)")
 
+pdf(curves_combined) 
 ```
 
 
