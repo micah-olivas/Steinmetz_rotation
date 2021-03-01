@@ -1,7 +1,7 @@
 ---
 title: "Alternative TAP-seq Predictive Models"
 author: "Micah Olivas"
-date: "11/11/2020"
+date: "2/25/2020"
 output: html_document
 ---
 
@@ -12,10 +12,10 @@ options(bitmapType = "cairo")
 
 ## Compute environment
 
-Clear data environment
+Clear data environment (uncomment to clear)
 
 ```{r ClearDataEnv}
-rm(list=ls())
+# rm(list=ls())
 ```
 
 Load required packages
@@ -168,13 +168,13 @@ rm(tempobj,
    sig_genes_pairs,
    sig_genes_pairs_300kb_atLeastOneHit,
    inTraining,
-   testing,
-   training,
-   chrom8_testing,
-   chrom8_training,
+   # testing,
+   # training,
+   # chrom8_testing,
+   # chrom8_training,
    chrom8_sig_genes_pairs_300kb_atLeastOneHit,
-   chrom11_testing,
-   chrom11_training,
+   # chrom11_testing,
+   # chrom11_training,
    chrom11_sig_genes_pairs_300kb_atLeastOneHit,
    preproc_list
    )
@@ -345,6 +345,34 @@ calc_auprc = function(model, data){
 }
 ```
 
+```{r Lists_for_evalm}
+
+pdf()
+# combined_pr <- predict(fit_combined_GBM, model_combined_testing, type = 'prob')
+# 
+# combined_pr <- data.frame(combined_pr, obs = model_combined_testing$significant)
+# evalm(combined_pr, plots = c('pr'), gnames = c("Gradient-Boosted Machine"))
+# 
+
+get_pr_curves = function(model_list, observations, model_name){
+  preds_list = list()
+  for(i in model_list){
+    preds_list[[length(myList)+1]] <- predict(i, observations, type = 'prob')
+  }
+  preds_list
+}
+
+get_pr_curves(fit_chrom8_GBM, model_chrom11_training, "ranger")
+
+
+  my_preds <- predict(model, observations, type = 'prob')
+  my_preds <- data.frame(my_preds, obs = observations$significant)
+  
+  evalm(c(preds_list), plots = c('pr'), gnames = model_name)
+}
+
+```
+
 Create table of AUPRC values
 
 ```{r Model_Metrics}
@@ -353,7 +381,8 @@ metrics = c("Train on All")
 
 metrics_of_models = list(metrics, model_types)
 
-calc_auprc(model_chrom11_testing, chrom8_testing)
+calc_auprc(fit_chrom8_GBM, chrom8_testing)
+
 
 AUPRC_summaries = matrix(AUPRCs, ncol = length(model_types), dimnames = metrics_of_models)
 ```
@@ -363,14 +392,15 @@ Plot AUPRC for Combined and Self Chrom Prediction Training
 
 ```{r Plot_Self_Curves}
 
-# set quartz as graphical device for plot output
-quartz()
-# pdf()
+# pdf graphics device for output
+pdf()
+
+# Plot Curves for Combined Train and Test
+curves_combined = evalm(list(fit_combined_ranger, fit_combined_xgbt, fit_combined_GBM), gnames = c("Random Forest", "Gradient-Boosted Trees", "Gradient-Boosted Machine"), plots = c("pr"), title = "Model Precision-Recall Curves")
 
 # Plot Curves for Combined Train and Test
 curves_combined = evalm(list(fit_combined_ranger, fit_combined_xgbt, fit_combined_GBM), gnames = c("Random Forest", "Gradient-Boosted Trees", "Gradient-Boosted Machine"), plots = c("pr"), title = "AUPRCs (Trained on Significant Pairs less than 300kb separation)")
 
-pdf(curves_combined) 
 ```
 
 
