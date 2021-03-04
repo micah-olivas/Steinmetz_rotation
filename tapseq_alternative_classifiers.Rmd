@@ -15,7 +15,7 @@ options(bitmapType = "cairo")
 Clear data environment (uncomment to clear)
 
 ```{r ClearDataEnv}
-# rm(list=ls())
+rm(list=ls())
 ```
 
 Load required packages
@@ -43,7 +43,7 @@ Differential expression testing was performed for the data from the screen and r
 Load all gene enhancer pair data without power Andreas Gschwind's power calculations
 
 ```{r loadOriginalData}
-pairs_old = read.csv(url("http://steinmetzlab.embl.de/TAPdata/chromatin_annotated_pairs.csv"), stringsAsFactors = F)
+unfiltered_pairs = read.csv(url("http://steinmetzlab.embl.de/TAPdata/chromatin_annotated_pairs.csv"), stringsAsFactors = F)
 #this corresponds to the ../data/chromatin_annotated_pairs.csv if the snakemake pipeline was run
 expression = readRDS(url("http://steinmetzlab.embl.de/TAPdata/screen_mean_expression.RDS"))
 #this corresponds to the row means of ../data/11iScreen1 if the snakemake pipeline was run
@@ -71,8 +71,9 @@ For comparing classifier performance between datasets, we annotate the enhancers
 
 ```
 
-
 ## Global Data Preparation
+
+Subset filtered pairs
 
 ```{r prepareData}
 pairs$random = rnorm(nrow(pairs)) # add a random covariate
@@ -94,8 +95,7 @@ sig_genes_pairs = pairs %>%
 
 ```
 
-
-## Partition data for Cross-validation
+Partition filtered data for Cross-validation
 
 ```{r CV_Partition}
 
@@ -126,16 +126,72 @@ chrom11_testing = testing %>%
 
 
 preproc_list = list(
-  model_combined_training = training, #  Change data set name and contents here
-  model_combined_testing = testing,
-  model_chrom8_training = chrom8_training,
-  model_chrom8_testing = chrom8_testing,
-  model_chrom11_training = chrom11_training,
-  model_chrom11_testing = chrom11_testing
+  model_combined_filtered_training = training, #  Change data set name and contents here
+  model_combined_filtered_testing = testing,
+  model_chrom8_filtered_training = chrom8_training,
+  model_chrom8_filtered_testing = chrom8_testing,
+  model_chrom11_filtered_training = chrom11_training,
+  model_chrom11_filtered_testing = chrom11_testing
   # training_gw = training_gw,
   # testing_gw = testing_gw
   )
 
+
+# Create function to remove non-numeric data testing, training datasets
+process_data = function(my_data){
+  numvar = names(my_data)[which(sapply(my_data, is.numeric))]
+  my_data_new <<- my_data[,numvar]
+
+  my_data_new$significant <<- ifelse(my_data_new$significant == 1, "yes", "no")
+  my_data_new$significant <<- factor(my_data_new$significant) # factorize significaance column
+
+  return(my_data_new)
+}
+
+# Apply numeric selction function to list of datasets
+output = lapply(preproc_list, process_data)
+for(i in 1:length(output)){
+  tempobj = output[[i]]
+  eval(parse(text = paste(names(output)[[i]], "=tempobj")))
+}
+
+```
+
+Subset unfiltered pairs
+
+```{r prepareData}
+unfiltered_pairs$random = rnorm(nrow(unfiltered_pairs)) # add a random covariate
+unfiltered_pairs = subset(unfiltered_pairs, grepl("^chr", perturbation)) # removes controls
+unfiltered_pairs$expression = expression[as.character(unfiltered_pairs$gene)] # add baseline expression level of gene
+unfiltered_pairs$enh_chr = factor(unfiltered_pairs$enh_chr) # Select genes which are associated with at least one enhancer within 300kb
+
+sig_genes_pairs_300kb_atLeastOneHit = unfiltered_pairs %>%
+  group_by(sample, gene) %>%
+  filter(dist_to_tss <= 0.3e6 ) %>% # changed, like in fulco
+  filter(sum(significant) > 0) %>%
+  select(-c(2, 5:13, 24:28, 31))
+
+# Genes which are associated with at least one enhancer genome-wide
+sig_genes_pairs = unfiltered_pairs %>%
+  group_by(sample, gene) %>%
+  filter(sum(significant) > 0) %>%
+  select(-c(2, 5:13, 24:28, 31))
+
+```
+
+Partition Unfiltered data for Cross-validation
+
+```{r CV_Partition}
+
+# Partition data for cross-validation during scripting
+inTraining = createDataPartition(sig_genes_pairs_300kb_atLeastOneHit$significant, p = .90, list = FALSE)
+training = sig_genes_pairs_300kb_atLeastOneHit[ inTraining, -c(14,16,17,19)] # Remove ABC score, dist_bins
+testing = sig_genes_pairs_300kb_atLeastOneHit[-inTraining, -c(14,16,17,19)] # Remove ABC score, dist_bins
+
+preproc_list = list(
+  model_combined_unfiltered_training = training, #  Change data set name and contents here
+  model_combined_unfiltered_testing = testing
+  )
 
 # Create function to remove non-numeric data testing, training datasets
 process_data = function(my_data){
@@ -164,7 +220,6 @@ Remove temporary variables
 # Remove temporary variables
 rm(tempobj,
    my_data_new,
-   pairs_old,
    sig_genes_pairs,
    sig_genes_pairs_300kb_atLeastOneHit,
    inTraining,
@@ -181,8 +236,9 @@ rm(tempobj,
 
 ```
 
+## Train Models
 
-## Configure Caret Training Controls
+Configure Caret Training Controls
 
 ```{r Training_Controls}
 
@@ -199,14 +255,50 @@ fitControl = trainControl(method = "repeatedcv",
 
 ```
 
+Unfiltered Combined Pairs Fit
 
-## Train Combined Pairs models in Caret
-
-```{r Combined_Train}
+```{r Unfiltered_Combined_Train}
 
 
 # Train model with Caret
-fit_combined_ranger = train(significant ~ .,
+fit_combined_unfiltered_ranger = train(significant ~ .,
+                                       data = model_combined_unfiltered_training,
+                                       method = "ranger",
+                                       trControl = fitControl,
+                                       verbose = FALSE,
+                                       ## Specify which metric to optimize
+                                       metric = "AUC"
+                                       )
+
+# Train GBT model
+fit_combined_unfiltered_xgbt = train(significant ~ .,
+                                     data = model_combined_unfiltered_training,
+                                     method = "xgbTree",
+                                     verbose = FALSE,
+                                     trControl = fitControl,
+                                     ## Specify which metric to optimize
+                                     metric = "AUC"
+                                     )
+
+# Train GBM model
+fit_combined_unfiltered_GBM = train(significant ~ .,
+                                     data = model_combined_unfiltered_training,
+                                     method = "gbm",
+                                     verbose = FALSE,
+                                     trControl = fitControl,
+                                     ## Specify which metric to optimize
+                                     metric = "AUC"
+                                     )
+
+```
+
+Filtered Combined Pairs Fit
+
+```{r Filtered_Combined_Train}
+
+
+# Train model with Caret
+fit_combined_filtered_ranger = train(significant ~ .,
                             data = model_combined_training,
                             method = "ranger",
                             trControl = fitControl,
@@ -216,7 +308,7 @@ fit_combined_ranger = train(significant ~ .,
                             )
 
 # Train GBT model
-fit_combined_xgbt = train(significant ~ .,
+fit_combined_filtered_xgbt = train(significant ~ .,
                           data = model_combined_training,
                           method = "xgbTree",
                           verbose = FALSE,
@@ -226,7 +318,7 @@ fit_combined_xgbt = train(significant ~ .,
                           )
 
 # Train GBM model
-fit_combined_GBM = train(significant ~ .,
+fit_combined_filtered_GBM = train(significant ~ .,
                          data = model_combined_training,
                          method = "gbm",
                          verbose = FALSE,
@@ -237,10 +329,9 @@ fit_combined_GBM = train(significant ~ .,
 
 ```
 
+Filtered Chrom8 Pairs Fit
 
-## Train on Chromosome 8 pairs
-
-```{r Chrom8_Train}
+```{r Filtered_Chrom8_Train}
 
 # Train rf model with Caret
 fit_chrom8_ranger = train(significant ~ .,
@@ -274,10 +365,9 @@ fit_chrom8_GBM = train(significant ~ .,
 
 ```
 
+Filtered Chrom11 Pairs Fit
 
-## Train on Chromosome 11 Pairs
-
-```{r Chrom11_Train}
+```{r Filtered_Chrom11_Train}
 
 # Train model with Caret
 fit_chrom11_ranger = train(significant ~ .,
@@ -311,95 +401,94 @@ fit_chrom11_GBM = train(significant ~ .,
 
 ```
 
-
-## Self Comparisons
+## Comparisons
 
 Calculate AUPRC for Self Models
-```{r Compare_Models}
+
+```{r evalm_lists}
 
 # Create lists containing each set of models
-models_list_combined = list(xgbt_combined = fit_combined_xgbt,
-                            GBM_combined = fit_combined_GBM,
-                            random_forest_combined = fit_combined_ranger
-                            )
+models_list_unfiltered_combined = list(xgbt_combined_unfiltered = fit_combined_unfiltered_xgbt,
+                                       GBM_combined_unfilted = fit_combined_unfiltered_GBM,
+                                       ranger_combined_unfiltered = fit_combined_unfiltered_ranger
+                                       )
 
-models_list_chrom8 = list(xgbt_chrom8 = fit_chrom8_xgbt,
-                          GBM_chrom8 = fit_chrom8_GBM,
-                          random_forest_chrom8 = fit_chrom8_ranger
-                          )
+models_list_filtered_combined = list(xgbt_combined_filtered = fit_combined_filtered_xgbt,
+                                     GBM_combined_filtered = fit_combined_filtered_GBM,
+                                     random_forest_combined_filtered = fit_combined_filtered_ranger
+                                     )
 
-models_list_chrom11 = list(xgbt_chrom11 = fit_chrom11_xgbt,
-                           GBM_chrom11 = fit_chrom11_GBM,
-                           random_forest_chrom11 = fit_chrom11_ranger
-                           )
+models_list_filtered_chrom8 = list(xgbt_chrom8_filtered = fit_chrom8_xgbt,
+                                   GBM_chrom8_filtered = fit_chrom8_GBM,
+                                   ranger_chrom8_filtered = fit_chrom8_ranger
+                                   )
+
+models_list_filtered_chrom11 = list(xgbt_chrom11_filtered = fit_chrom11_xgbt,
+                                    GBM_chrom11_filtered = fit_chrom11_GBM,
+                                    ranger_chrom11_filtered = fit_chrom11_ranger
+                                    )
+
+# Initialize graphical output device
+pdf(file = "precurves.pdf")
 
 
-# define function to generate predictions and precision recall curve by model on testing set
-calc_auprc = function(model, data){
-  index_significant = data$significant == "yes"
-  index_insignificant = data$significant == "no"
-
-  predictions = predict(model, data, type = "prob")
-
-  pr.curve(predictions$yes[index_significant], predictions$yes[index_insignificant], curve = TRUE)
-}
-```
-
-```{r Lists_for_evalm}
-
-pdf()
-# combined_pr <- predict(fit_combined_GBM, model_combined_testing, type = 'prob')
+# combined_pr <- predict(models_list_filtered_combined, model_combined_unfiltered_testing, type = 'prob')
 # 
-# combined_pr <- data.frame(combined_pr, obs = model_combined_testing$significant)
-# evalm(combined_pr, plots = c('pr'), gnames = c("Gradient-Boosted Machine"))
+# for (i in seq_along(combined_pr)){
+#   combined_pr[[i]] <- data.frame(combined_pr[[i]], obs = model_combined_unfiltered_testing$significant)
+# }
+# 
+# evalm(combined_pr, plots = 'pr', gnames = c('1', '2', '3'), title = "here")
 # 
 
-get_pr_curves = function(model_list, observations, model_name){
-  preds_list = list()
-  for(i in model_list){
-    preds_list[[length(myList)+1]] <- predict(i, observations, type = 'prob')
-  }
-  preds_list
-}
 
-get_pr_curves(fit_chrom8_GBM, model_chrom11_training, "ranger")
-
-
-  my_preds <- predict(model, observations, type = 'prob')
-  my_preds <- data.frame(my_preds, obs = observations$significant)
+get_pr_curves = function(model_list, observations){
+  preds_list <- predict(model_list, observations, type = 'prob')
   
-  evalm(c(preds_list), plots = c('pr'), gnames = model_name)
+  for (i in seq_along(preds_list)){
+    preds_list[[i]] <- data.frame(preds_list[[i]], obs = observations$significant)
+  }
+  
+  for (i in seq_along(preds_list)){
+    evalm(preds_list[i], plots = c('pr'), gnames = "now")
+  }
 }
 
+get_pr_curves(models_list_filtered_combined, model_combined_filtered_training)
+
+
+
+# predict(models_list_unfiltered_combined[[1]], model_chrom11_testing, type = 'prob')
+
 ```
 
-Create table of AUPRC values
-
-```{r Model_Metrics}
-model_types = c("XGBOOST", "GBM", "Random Forest (Caret)", "Random Forest (Old)")
-metrics = c("Train on All")
-
-metrics_of_models = list(metrics, model_types)
-
-calc_auprc(fit_chrom8_GBM, chrom8_testing)
-
-
-AUPRC_summaries = matrix(AUPRCs, ncol = length(model_types), dimnames = metrics_of_models)
-```
-
-
-Plot AUPRC for Combined and Self Chrom Prediction Training
+Plot PRCs for Combined Models
 
 ```{r Plot_Self_Curves}
 
-# pdf graphics device for output
-pdf()
+# Set pdf graphics device for output
+pdf(file = 'Combined_fits.pdf')
 
-# Plot Curves for Combined Train and Test
-curves_combined = evalm(list(fit_combined_ranger, fit_combined_xgbt, fit_combined_GBM), gnames = c("Random Forest", "Gradient-Boosted Trees", "Gradient-Boosted Machine"), plots = c("pr"), title = "Model Precision-Recall Curves")
+# Plot Curves for Combined Unfiltered
+curves_unfiltered_combined = evalm(list(fit_combined_unfiltered_ranger, fit_combined_unfiltered_xgbt, fit_combined_unfiltered_GBM), gnames = c("Random Forest", "Gradient-Boosted Trees", "Gradient-Boosted Machine"), plots = c("pr"), title = "Model PR Curves (Unfiltered)")
 
-# Plot Curves for Combined Train and Test
-curves_combined = evalm(list(fit_combined_ranger, fit_combined_xgbt, fit_combined_GBM), gnames = c("Random Forest", "Gradient-Boosted Trees", "Gradient-Boosted Machine"), plots = c("pr"), title = "AUPRCs (Trained on Significant Pairs less than 300kb separation)")
+# Plot Curves for Combined Filtered
+curves_filtered_combined = evalm(list(fit_combined_filtered_ranger, fit_combined_filtered_xgbt, fit_combined_filtered_GBM), gnames = c("Random Forest", "Gradient-Boosted Trees", "Gradient-Boosted Machine"), plots = c("pr"), title = "Model PR Curves (80% power at effect size 25)")
+
+```
+
+Plot PRCs for filtered Single Chrom Models
+
+```{r Plot_Self_Curves}
+
+# Set pdf graphics device for output
+pdf(file = "Single_Chrom_fits.pdf")
+
+# Plot Curves for Chrom 8 Training and Testing
+curves_combined = evalm(list(fit_chrom8_ranger, fit_chrom8_xgbt, fit_chrom8_GBM), gnames = c("Random Forest", "Gradient-Boosted Trees", "Gradient-Boosted Machine"), plots = c("pr"), title = "Traing and Predict on Chrom 8 (80% power at effect size 25")
+
+# Plot Curves for Chrom 11 Training and Testing
+curves_combined = evalm(list(fit_chrom11_ranger, fit_chrom11_xgbt, fit_chrom11_GBM), gnames = c("Random Forest", "Gradient-Boosted Trees", "Gradient-Boosted Machine"), plots = c("pr"), title = "Traing and Predict on Chrom 11 (80% power at effect size 25")
 
 ```
 
